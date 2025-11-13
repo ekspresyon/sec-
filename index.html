@@ -48,66 +48,7 @@
         <!-- Main content will be rendered here -->
     </div>
 
-    <script>
-        // --- DATA ---
-        // const EXAM_DATA = {
-        //   "exam_1": {
-        //     "title": "General Knowledge Exam",
-        //     "questions": [
-        //       {
-        //         "id": 1,
-        //         "text": "What is the capital city of Australia?",
-        //         "choices": [
-        //           {"a": "Sydney"},
-        //           {"b": "Melbourne"},
-        //           {"c": "Canberra"},
-        //           {"d": "Perth"},
-        //           {"e": "Brisbane"}
-        //         ],
-        //         "answer": "c"
-        //       },
-        //       {
-        //         "id": 2,
-        //         "text": "Which element has the chemical symbol 'Fe'?",
-        //         "choices": [
-        //           {"a": "Fluorine"},
-        //           {"b": "Iron"},
-        //           {"c": "Copper"},
-        //           {"d": "Gold"},
-        //           {"e": "Silver"}
-        //         ],
-        //         "answer": "b"
-        //       },
-        //       {
-        //         "id": 3,
-        //         "text": "Who is credited with inventing the telephone?",
-        //         "choices": [
-        //           {"a": "Thomas Edison"},
-        //           {"b": "Nikola Tesla"},
-        //           {"c": "Alexander Graham Bell"},
-        //           {"d": "Guglielmo Marconi"},
-        //           {"e": "Henry Ford"}
-        //         ],
-        //         "answer": "c"
-        //       },
-        //       {
-        //         "id": 4,
-        //         "text": "The Great Wall of China is visible from the moon with the naked eye.",
-        //         "choices": [
-        //           {"a": "True"},
-        //           {"b": "False"}
-        //         ],
-        //         "answer": "b"
-        //       },
-        //       {
-        //         "id": 5,
-        //         "text": "What is the largest planet in our solar system?",
-        //         "answer": "Jupiter"
-        //       }
-        //     ]
-        //   }
-        // };
-
+    <script>        
         // --- STATE MANAGEMENT ---
         const state = {
             allQuestions: EXAM_DATA.exam_1.questions,
@@ -387,7 +328,7 @@
                 }).join('');
                 questionContent = `<div class="space-y-3">${options}</div>`;
             } 
-            // Short Answer
+            // Short Answer (kept for future flexibility, although not used in current data)
             else {
                 questionContent = `
                     <input type="text" id="short-answer-${q.id}" placeholder="Type your answer here..." value="${currentAnswer || ''}"
@@ -516,23 +457,27 @@
                 let correctAnswer = q.answer;
                 let isCorrect = false;
 
-                // Handle MCQ/True-False: correct answer is the choice key (a, b, etc.)
+                // Handle MCQ/True-False: correct answer is the choice key (A, B, etc.)
                 if (q.choices) {
                     isCorrect = userAnswer === correctAnswer;
                     const correctChoice = q.choices.find(c => Object.keys(c)[0] === correctAnswer);
                     correctAnswer = correctChoice ? `${correctAnswer.toUpperCase()}: ${correctChoice[correctAnswer]}` : correctAnswer;
                 } 
-                // Handle Short Answer: correct answer is the string itself (case-insensitive check for user feedback)
+                // Handle Short Answer: (Kept for compatibility, though not used in current data)
                 else {
                     isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
                 }
 
                 if (isCorrect) correctCount++;
                 
+                // Icon for correctness
                 const icon = isCorrect ? 
                     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 text-green-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>' :
                     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 text-red-500"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>';
                 
+                // Explanation text to display
+                const explanationText = q.explanation || 'No explanation provided.';
+
                 return `
                     <div class="p-4 border-b last:border-b-0 flex items-start space-x-4">
                         <div class="pt-1">${icon}</div>
@@ -543,6 +488,11 @@
                                 ${userAnswer}
                             </p>
                             ${!isCorrect ? `<p class="text-sm text-gray-500"><span class="font-medium text-blue-600">Correct Answer:</span> ${correctAnswer}</p>` : ''}
+                            
+                            <!-- Display the explanation -->
+                            <p class="mt-3 text-sm text-gray-700 p-3 bg-gray-100 rounded-lg border-l-4 border-blue-500">
+                                <span class="font-bold text-blue-600">Explanation:</span> ${explanationText}
+                            </p>
                         </div>
                     </div>
                 `;
