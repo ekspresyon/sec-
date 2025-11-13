@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Exam Application</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="data.js"></script>
+    <style>
+        /* Custom styles for appearance */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 900px;
+        }
+        .card {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .timer-display {
+            font-variant-numeric: tabular-nums;
+        }
+        .short-answer-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+    <!-- Configure Tailwind for the "Inter" font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="p-4 sm:p-8">
+    <div id="app-container" class="container mx-auto">
+        <!-- Main content will be rendered here -->
+    </div>
+
+    <script>
+        // --- DATA ---
+        // const EXAM_DATA = {
+        //   "exam_1": {
+        //     "title": "General Knowledge Exam",
+        //     "questions": [
+        //       {
+        //         "id": 1,
+        //         "text": "What is the capital city of Australia?",
+        //         "choices": [
+        //           {"a": "Sydney"},
+        //           {"b": "Melbourne"},
+        //           {"c": "Canberra"},
+        //           {"d": "Perth"},
+        //           {"e": "Brisbane"}
+        //         ],
+        //         "answer": "c"
+        //       },
+        //       {
+        //         "id": 2,
+        //         "text": "Which element has the chemical symbol 'Fe'?",
+        //         "choices": [
+        //           {"a": "Fluorine"},
+        //           {"b": "Iron"},
+        //           {"c": "Copper"},
+        //           {"d": "Gold"},
+        //           {"e": "Silver"}
+        //         ],
+        //         "answer": "b"
+        //       },
+        //       {
+        //         "id": 3,
+        //         "text": "Who is credited with inventing the telephone?",
+        //         "choices": [
+        //           {"a": "Thomas Edison"},
+        //           {"b": "Nikola Tesla"},
+        //           {"c": "Alexander Graham Bell"},
+        //           {"d": "Guglielmo Marconi"},
+        //           {"e": "Henry Ford"}
+        //         ],
+        //         "answer": "c"
+        //       },
+        //       {
+        //         "id": 4,
+        //         "text": "The Great Wall of China is visible from the moon with the naked eye.",
+        //         "choices": [
+        //           {"a": "True"},
+        //           {"b": "False"}
+        //         ],
+        //         "answer": "b"
+        //       },
+        //       {
+        //         "id": 5,
+        //         "text": "What is the largest planet in our solar system?",
+        //         "answer": "Jupiter"
+        //       }
+        //     ]
+        //   }
+        // };
+
+        // --- STATE MANAGEMENT ---
+        const state = {
+            allQuestions: EXAM_DATA.exam_1.questions,
+            examQuestions: [], // Questions selected for the current exam
+            currentQuestionIndex: 0,
+            userAnswers: {}, // { questionId: answerValue }
+            bookmarkedQuestions: {}, // { questionId: boolean }
+            timer: 0, // Time remaining in seconds
+            timerInterval: null,
+            isPaused: false,
+            appStatus: 'settings' // 'settings', 'exam', 'results'
+        };
+
+        const appContainer = document.getElementById('app-container');
+
+        // --- HELPER FUNCTIONS ---
+
+        /**
+         * Shuffles an array in place (Fisher-Yates algorithm).
+         * @param {Array} array 
+         * @returns {Array} The shuffled array.
+         */
+        function shuffleArray(array) {
+            let currentIndex = array.length, randomIndex;
+
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [
+                    array[randomIndex], array[currentIndex]];
+            }
+
+            return array;
+        }
+
+        /**
+         * Formats seconds into MM:SS string.
+         * @param {number} totalSeconds 
+         * @returns {string}
+         */
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        /**
+         * Stops and resets the timer interval.
+         */
+        function stopTimer() {
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+        }
+
+        /**
+         * Updates the countdown timer display.
+         */
+        function updateTimer() {
+            if (state.isPaused || state.timer <= 0) {
+                stopTimer();
+                if (state.timer === 0 && state.appStatus === 'exam') {
+                    endExam();
+                }
+                return;
+            }
+
+            state.timer--;
+            const timerEl = document.getElementById('timer-display');
+            if (timerEl) {
+                timerEl.textContent = formatTime(state.timer);
+            }
+        }
+
+        /**
+         * Toggles the pause state of the timer.
+         */
+        window.togglePause = function() {
+            state.isPaused = !state.isPaused;
+            const pauseBtn = document.getElementById('pause-button');
+            if (pauseBtn) {
+                pauseBtn.innerHTML = state.isPaused ? 
+                    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8.689v10.322A3 3 3 0 0 0 6.189 22h11.622A3 3 3 0 0 0 21 18.689V8.689M3 8.689C3 7.757 3.757 7 4.689 7h14.622c.932 0 1.689.757 1.689 1.689M3 8.689l-.5 2.808C2.189 12.04 2 13 2 13s.189.96-.189 1.503L3 17.311M21 8.689l.5 2.808c.311.443.5.96.5 1.503s-.189.96-.5 1.503L21 17.311M12 2v5"/></svg> Resume' : 
+                    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9v6m-4.5 0V9M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> Pause';
+            }
+
+            if (!state.isPaused && !state.timerInterval && state.timer > 0) {
+                state.timerInterval = setInterval(updateTimer, 1000);
+            }
+        }
+
+        // --- APP FLOW FUNCTIONS ---
+
+        /**
+         * Initializes the application by rendering the settings view.
+         */
+        function initializeApp() {
+            renderSettings();
+        }
+
+        /**
+         * Renders the settings form to configure the exam.
+         */
+        function renderSettings() {
+            state.appStatus = 'settings';
+            appContainer.innerHTML = `
+                <div class="card max-w-lg mx-auto mt-12 p-8">
+                    <h1 class="text-3xl font-bold mb-6 text-gray-800">${EXAM_DATA.exam_1.title} Setup</h1>
+                    <form id="settings-form" class="space-y-6">
+                        <div>
+                            <label for="question-count" class="block text-sm font-medium text-gray-700 mb-2">Number of Questions (Max: ${state.allQuestions.length})</label>
+                            <input type="number" id="question-count" name="question-count" min="1" max="${state.allQuestions.length}" value="${state.allQuestions.length}" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        </div>
+                        <div>
+                            <label for="duration-per-question" class="block text-sm font-medium text-gray-700 mb-2">Duration per Question (minutes, Default: 1)</label>
+                            <input type="number" id="duration-per-question" name="duration-per-question" min="0.5" step="0.5" value="1" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition duration-200 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 mr-2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9A2.25 2.25 0 0 1 18.75 7.5v9a2.25 2.25 0 0 1-2.25 2.25h-9A2.25 2.25 0 0 1 5.25 16.5v-9ZM12 7.5v12"/>
+                            </svg>
+                            Start Exam
+                        </button>
+                    </form>
+                </div>
+            `;
+
+            document.getElementById('settings-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const count = parseInt(document.getElementById('question-count').value);
+                const duration = parseFloat(document.getElementById('duration-per-question').value);
+                startExam(count, duration);
+            });
+        }
+
+        /**
+         * Starts the exam based on settings.
+         * @param {number} count 
+         * @param {number} durationMinutes 
+         */
+        function startExam(count, durationMinutes) {
+            // 1. Select and shuffle questions
+            const shuffled = shuffleArray([...state.allQuestions]);
+            state.examQuestions = shuffled.slice(0, Math.min(count, state.allQuestions.length));
+
+            // 2. Initialize state
+            state.currentQuestionIndex = 0;
+            state.userAnswers = {};
+            state.bookmarkedQuestions = {};
+            state.isPaused = false;
+            
+            // 3. Set timer (Duration * Count * 60 seconds)
+            const totalDurationSeconds = Math.round(durationMinutes * state.examQuestions.length * 60);
+            state.timer = totalDurationSeconds;
+
+            // 4. Update status and start timer
+            state.appStatus = 'exam';
+            stopTimer(); // Ensure any old timer is cleared
+            state.timerInterval = setInterval(updateTimer, 1000);
+
+            renderExamView();
+        }
+
+        /**
+         * Renders the main exam structure.
+         */
+        function renderExamView() {
+            if (state.appStatus !== 'exam' || state.examQuestions.length === 0) return;
+
+            appContainer.innerHTML = `
+                <div class="flex flex-col md:flex-row gap-6">
+                    <!-- Timer & Controls (Sidebar/Header) -->
+                    <div class="md:w-1/4">
+                        <div class="card sticky top-4 p-5 mb-6 bg-blue-500 text-white">
+                            <h2 class="text-xl font-semibold mb-2">Time Remaining</h2>
+                            <div id="timer-display" class="timer-display text-4xl font-extrabold mb-4">
+                                ${formatTime(state.timer)}
+                            </div>
+                            <div class="flex flex-col space-y-2">
+                                <button id="pause-button" onclick="togglePause()" class="flex items-center justify-center bg-white text-blue-600 hover:bg-gray-100 font-medium py-2 px-4 rounded-lg shadow-md transition duration-200">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9v6m-4.5 0V9M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                    Pause
+                                </button>
+                                <button onclick="endExam()" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-200">
+                                    End Exam & Score
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Navigation Grid -->
+                        <div class="card p-4">
+                            <h3 class="font-semibold mb-3 text-lg text-gray-700">Question Navigation</h3>
+                            <div id="nav-grid" class="grid grid-cols-5 gap-2">
+                                <!-- Navigation buttons will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Question Content Area -->
+                    <div id="question-view" class="md:w-3/4">
+                        <!-- Current question will be injected here -->
+                    </div>
+                </div>
+            `;
+            renderQuestion();
+            renderNavigationGrid();
+        }
+
+        /**
+         * Renders the navigation grid/buttons.
+         */
+        function renderNavigationGrid() {
+            const navGridEl = document.getElementById('nav-grid');
+            if (!navGridEl) return;
+            
+            navGridEl.innerHTML = state.examQuestions.map((q, index) => {
+                const isCurrent = index === state.currentQuestionIndex;
+                const isAnswered = state.userAnswers.hasOwnProperty(q.id);
+                const isBookmarked = state.bookmarkedQuestions[q.id];
+
+                let classes = 'p-2 text-sm rounded-lg font-semibold transition duration-150';
+                
+                if (isCurrent) {
+                    classes += ' bg-blue-600 text-white shadow-lg ring-2 ring-blue-300';
+                } else if (isBookmarked) {
+                    classes += ' bg-yellow-400 text-gray-800 hover:bg-yellow-500';
+                } else if (isAnswered) {
+                    classes += ' bg-green-500 text-white hover:bg-green-600';
+                } else {
+                    classes += ' bg-gray-200 text-gray-700 hover:bg-gray-300';
+                }
+
+                return `
+                    <button onclick="goToQuestion(${index})" class="${classes}">
+                        ${index + 1}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Renders the content of the current question.
+         */
+        function renderQuestion() {
+            const q = state.examQuestions[state.currentQuestionIndex];
+            const qEl = document.getElementById('question-view');
+            if (!qEl || !q) return;
+
+            const isFirst = state.currentQuestionIndex === 0;
+            const isLast = state.currentQuestionIndex === state.examQuestions.length - 1;
+            const isBookmarked = state.bookmarkedQuestions[q.id] || false;
+            const currentAnswer = state.userAnswers[q.id];
+            
+            let questionContent = '';
+
+            // Multiple Choice / True False
+            if (q.choices) {
+                // Shuffle choices before mapping them to options
+                const shuffledChoices = shuffleArray([...q.choices]);
+                
+                const options = shuffledChoices.map(choiceObj => {
+                    const key = Object.keys(choiceObj)[0];
+                    const value = choiceObj[key];
+                    const isChecked = currentAnswer === key;
+
+                    return `
+                        <label class="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition duration-150 border ${isChecked ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}">
+                            <input type="radio" name="answer" value="${key}" ${isChecked ? 'checked' : ''}
+                                onchange="handleAnswer(${q.id}, this.value)"
+                                class="h-5 w-5 text-blue-600 border-gray-300 focus:ring-blue-500">
+                            <span class="text-gray-800 font-medium"><span class="uppercase font-bold text-blue-600 pr-2">${key}:</span> ${value}</span>
+                        </label>
+                    `;
+                }).join('');
+                questionContent = `<div class="space-y-3">${options}</div>`;
+            } 
+            // Short Answer
+            else {
+                questionContent = `
+                    <input type="text" id="short-answer-${q.id}" placeholder="Type your answer here..." value="${currentAnswer || ''}"
+                        onblur="handleAnswer(${q.id}, this.value)"
+                        class="short-answer-input w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                    <p class="text-sm text-gray-500 mt-2">Your answer must match the correct string exactly (case-sensitive check is recommended).</p>
+                `;
+            }
+
+
+            qEl.innerHTML = `
+                <div class="card">
+                    <div class="flex justify-between items-center mb-6 border-b pb-4">
+                        <h2 class="text-xl font-bold text-gray-700">Question ${state.currentQuestionIndex + 1} of ${state.examQuestions.length}</h2>
+                        <button onclick="handleBookmark(${q.id})" class="text-sm px-3 py-1.5 rounded-full ${isBookmarked ? 'bg-yellow-400 text-gray-900' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'} transition duration-150 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-1 ${isBookmarked ? 'text-yellow-600' : 'text-gray-500'}">
+                                <path fill-rule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.573 1.41 2.573 2.847V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75a2.25 2.25 0 0 1-2.25-2.25V5.424c0-1.437 1.076-2.673 2.573-2.847Z" clip-rule="evenodd" />
+                            </svg>
+                            ${isBookmarked ? 'Bookmarked' : 'Bookmark'}
+                        </button>
+                    </div>
+
+                    <p class="text-2xl font-semibold mb-6 text-gray-900">${q.text}</p>
+                    
+                    ${questionContent}
+
+                    <!-- Navigation Buttons -->
+                    <div class="mt-8 pt-4 border-t flex justify-between">
+                        <button onclick="prevQuestion()" ${isFirst ? 'disabled' : ''} class="flex items-center px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+                            Previous
+                        </button>
+                        <button onclick="nextQuestion()" class="flex items-center px-6 py-2 font-bold rounded-lg transition duration-200 ${isLast ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}">
+                            ${isLast ? 'Finish Exam' : 'Next Question'}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 ml-2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+            // Re-render navigation grid to update colors/indicators
+            renderNavigationGrid();
+        }
+
+        /**
+         * Navigates to the next question or ends the exam.
+         */
+        window.nextQuestion = function() {
+            if (state.currentQuestionIndex < state.examQuestions.length - 1) {
+                state.currentQuestionIndex++;
+                renderQuestion();
+            } else {
+                endExam();
+            }
+        }
+
+        /**
+         * Navigates to the previous question.
+         */
+        window.prevQuestion = function() {
+            if (state.currentQuestionIndex > 0) {
+                state.currentQuestionIndex--;
+                renderQuestion();
+            }
+        }
+        
+        /**
+         * Navigates to a specific question index.
+         * @param {number} index 
+         */
+        window.goToQuestion = function(index) {
+            if (index >= 0 && index < state.examQuestions.length) {
+                state.currentQuestionIndex = index;
+                renderQuestion();
+            }
+        }
+
+        /**
+         * Records the user's answer.
+         * @param {number} questionId 
+         * @param {string} answer 
+         */
+        window.handleAnswer = function(questionId, answer) {
+            const q = state.examQuestions.find(q => q.id === questionId);
+            if (!q) return;
+
+            // Short answer validation: ensure it's not empty string, otherwise delete answer
+            if (!q.choices && answer.trim() === '') {
+                delete state.userAnswers[questionId];
+            } else {
+                state.userAnswers[questionId] = answer.trim();
+            }
+            renderNavigationGrid();
+        }
+
+        /**
+         * Toggles the bookmark state for a question.
+         * @param {number} questionId 
+         */
+        window.handleBookmark = function(questionId) {
+            state.bookmarkedQuestions[questionId] = !state.bookmarkedQuestions[questionId];
+            if (!state.bookmarkedQuestions[questionId]) {
+                delete state.bookmarkedQuestions[questionId];
+            }
+            renderQuestion();
+            renderNavigationGrid();
+        }
+
+        /**
+         * Ends the exam, stops the timer, and moves to results view.
+         */
+        window.endExam = function() {
+            stopTimer();
+            state.appStatus = 'results';
+            renderResults();
+        }
+
+        /**
+         * Calculates and displays the final results.
+         */
+        function renderResults() {
+            let correctCount = 0;
+            let totalQuestions = state.examQuestions.length;
+            
+            const reviewItems = state.examQuestions.map(q => {
+                const userAnswer = state.userAnswers[q.id] || '(No Answer)';
+                let correctAnswer = q.answer;
+                let isCorrect = false;
+
+                // Handle MCQ/True-False: correct answer is the choice key (a, b, etc.)
+                if (q.choices) {
+                    isCorrect = userAnswer === correctAnswer;
+                    const correctChoice = q.choices.find(c => Object.keys(c)[0] === correctAnswer);
+                    correctAnswer = correctChoice ? `${correctAnswer.toUpperCase()}: ${correctChoice[correctAnswer]}` : correctAnswer;
+                } 
+                // Handle Short Answer: correct answer is the string itself (case-insensitive check for user feedback)
+                else {
+                    isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
+                }
+
+                if (isCorrect) correctCount++;
+                
+                const icon = isCorrect ? 
+                    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 text-green-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>' :
+                    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 text-red-500"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>';
+                
+                return `
+                    <div class="p-4 border-b last:border-b-0 flex items-start space-x-4">
+                        <div class="pt-1">${icon}</div>
+                        <div class="flex-1">
+                            <p class="font-bold text-gray-900">Q${q.id}: ${q.text}</p>
+                            <p class="text-sm mt-1">
+                                <span class="font-medium ${isCorrect ? 'text-green-600' : 'text-red-600'}">Your Answer:</span> 
+                                ${userAnswer}
+                            </p>
+                            ${!isCorrect ? `<p class="text-sm text-gray-500"><span class="font-medium text-blue-600">Correct Answer:</span> ${correctAnswer}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const wrongCount = totalQuestions - correctCount;
+            const scorePercentage = totalQuestions > 0 ? ((correctCount / totalQuestions) * 100).toFixed(1) : 0;
+            const resultColor = scorePercentage >= 80 ? 'text-green-600' : scorePercentage >= 50 ? 'text-yellow-600' : 'text-red-600';
+            
+            appContainer.innerHTML = `
+                <div class="max-w-3xl mx-auto mt-12">
+                    <div class="card p-8 mb-8 text-center bg-blue-500 text-white">
+                        <h1 class="text-4xl font-extrabold mb-2">Exam Results</h1>
+                        <p class="text-xl">Time Used: ${formatTime((state.examQuestions.length * 60 * 1) - state.timer)}</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                        <div class="card p-5 text-center">
+                            <p class="text-sm font-medium text-gray-500">Total Score</p>
+                            <p class="text-4xl font-bold mt-1 ${resultColor}">${scorePercentage}%</p>
+                        </div>
+                        <div class="card p-5 text-center">
+                            <p class="text-sm font-medium text-gray-500">Correct Answers</p>
+                            <p class="text-4xl font-bold mt-1 text-green-600">${correctCount}</p>
+                        </div>
+                        <div class="card p-5 text-center">
+                            <p class="text-sm font-medium text-gray-500">Wrong/Unanswered</p>
+                            <p class="text-4xl font-bold mt-1 text-red-600">${wrongCount}</p>
+                        </div>
+                    </div>
+
+                    <div class="card p-0">
+                        <h2 class="text-2xl font-bold p-4 border-b text-gray-800">Review of Answers (${totalQuestions} questions)</h2>
+                        <div class="divide-y divide-gray-100">
+                            ${reviewItems}
+                        </div>
+                    </div>
+                    
+                    <div class="mt-8 text-center">
+                        <button onclick="initializeApp()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition duration-200">
+                            Start New Exam
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        // --- ENTRY POINT ---
+        window.onload = initializeApp;
+
+    </script>
+</body>
+</html>
